@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Android Image Laundry</string>
+    <string name="title_activity_main">Android Image Laundry</string>
+    <string name="package_name">com.ben443.androidimagelaundry</string>
+    <string name="custom_url_scheme">com.ben443.androidimagelaundry</string>
+</resources>
