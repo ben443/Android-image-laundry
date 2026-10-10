@@ -13,9 +13,15 @@ export interface PartitionInfo {
   id: string;
   name: string;
   size: string;
+  sizeBytes?: number;
+  minSizeBytes?: number;
+  maxSizeBytes?: number;
   filesystem: 'ext4' | 'f2fs' | 'fat32' | 'erofs' | 'raw';
   isMountableRW: boolean;
   isMountedRW: boolean;
+  isDynamic?: boolean;
+  partitionType?: string;
+  description?: string;
 }
 
 export interface BootImageInfo {
@@ -51,6 +57,10 @@ export interface UploadedImage {
   isSamsung?: boolean;
   seAndroidFooter?: 'SEANDROIDENFORCE' | 'NO KNOX' | null;
   rawBuffer?: ArrayBuffer;
+  kernelBytes?: Uint8Array;
+  ramdiskBytes?: Uint8Array;
+  dtbBytes?: Uint8Array;
+  targetRepackSizeBytes?: number;
 }
 
 export interface UnpackedFileItem {
