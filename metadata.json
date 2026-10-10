@@ -1,0 +1,6 @@
+{
+  "name": "Android Boot Toolkit",
+  "description": "Advanced boot image unpacker, repacker, and partition utility interface.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
