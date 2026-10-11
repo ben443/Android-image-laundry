@@ -106,6 +106,15 @@ const DEFAULT_SAMSUNG_BOOT_IMG: UploadedImage = {
   targetRepackSizeBytes: 60 * 1024 * 1024
 };
 
+type RebuiltArtifact = {
+  id: string;
+  name: string;
+  bytes: Uint8Array;
+  mime: string;
+  kind: 'boot_img' | 'odin_tar' | 'ramdisk_cpio' | 'mainline_img';
+  createdAt: Date;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('boot');
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -272,6 +281,7 @@ export default function App() {
 
   // Search Filter for Ramdisk
   const [ramdiskSearchQuery, setRamdiskSearchQuery] = useState('');
+  const [rebuiltArtifacts, setRebuiltArtifacts] = useState<RebuiltArtifact[]>([]);
 
   // Samsung Repack Configuration
   const [samsungConfig, setSamsungConfig] = useState<SamsungRepackConfig>({
@@ -345,6 +355,17 @@ export default function App() {
       addLog(successMessage, 'success');
     }, duration);
   };
+
+  const addRebuiltArtifact = useCallback((artifact: Omit<RebuiltArtifact, 'id' | 'createdAt'>) => {
+    setRebuiltArtifacts(prev => [
+      {
+        ...artifact,
+        id: `artifact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: new Date()
+      },
+      ...prev
+    ].slice(0, 20));
+  }, []);
 
   // --- Real File Upload Handler ---
   const handleUploadFile = async (file: File) => {
@@ -605,30 +626,25 @@ export default function App() {
           const tarBytes = packageOdinTar(repackedBytes, 'boot.img', samsungConfig.generateMd5Checksum);
           const ext = samsungConfig.generateMd5Checksum ? '.tar.md5' : '.tar';
           const downloadName = `boot_repacked_odin_${Date.now()}${ext}`;
-
-          const blob = new Blob([tarBytes], { type: 'application/octet-stream' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = downloadName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          downloadBlob(tarBytes, downloadName, 'application/octet-stream');
+          addRebuiltArtifact({
+            name: downloadName,
+            bytes: tarBytes,
+            mime: 'application/octet-stream',
+            kind: 'odin_tar'
+          });
 
           addLog(`Samsung Odin Package created & downloaded: "${downloadName}" (${formatBytes(tarBytes.length)}) with valid POSIX UStar header & MD5.`, 'success');
         } else {
           // Standard .img download
           const downloadName = `repacked_${targetName.endsWith('.img') ? targetName : targetName + '.img'}`;
-          const blob = new Blob([repackedBytes], { type: 'application/octet-stream' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = downloadName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          downloadBlob(repackedBytes, downloadName, 'application/octet-stream');
+          addRebuiltArtifact({
+            name: downloadName,
+            bytes: repackedBytes,
+            mime: 'application/octet-stream',
+            kind: 'boot_img'
+          });
 
           addLog(`Repacked boot image downloaded: "${downloadName}" (${formatBytes(repackedBytes.length)}). ${samsungConfig.appendSeAndroidFooter ? 'SEANDROIDENFORCE footer injected.' : ''}`, 'success');
         }
@@ -726,6 +742,13 @@ export default function App() {
           } : null);
         }
 
+        addRebuiltArtifact({
+          name: `ramdisk_repacked_${Date.now()}.cpio`,
+          bytes: cpioBytes,
+          mime: 'application/octet-stream',
+          kind: 'ramdisk_cpio'
+        });
+
         addLog(`Repacked Ramdisk CPIO (${formatBytes(cpioBytes.length)}) with ${ramdiskFiles.length} files. Updated in boot image workspace!`, 'success');
       } catch (err) {
         addLog(`Ramdisk repack failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -737,8 +760,15 @@ export default function App() {
 
   const handleDownloadRamdiskCpio = () => {
     const cpioBytes = createCpioArchive(ramdiskFiles, 18 * 1024 * 1024);
-    downloadBlob(cpioBytes, 'ramdisk_repacked.cpio', 'application/octet-stream');
-    addLog(`Downloaded standalone ramdisk archive: ramdisk_repacked.cpio (${formatBytes(cpioBytes.length)})`, 'success');
+    const filename = `ramdisk_repacked_${Date.now()}.cpio`;
+    downloadBlob(cpioBytes, filename, 'application/octet-stream');
+    addRebuiltArtifact({
+      name: filename,
+      bytes: cpioBytes,
+      mime: 'application/octet-stream',
+      kind: 'ramdisk_cpio'
+    });
+    addLog(`Downloaded standalone ramdisk archive: ${filename} (${formatBytes(cpioBytes.length)})`, 'success');
   };
 
   const handleDeleteRamdiskFile = (id: string, name: string) => {
@@ -940,6 +970,12 @@ export default function App() {
 
         const fname = `mainline_boot_v${mainlineConfig.targetHeaderVersion}_${Date.now()}.img`;
         downloadBlob(outBootImg, fname, 'application/octet-stream');
+        addRebuiltArtifact({
+          name: fname,
+          bytes: outBootImg,
+          mime: 'application/octet-stream',
+          kind: 'mainline_img'
+        });
         addLog(`Mainline Android Boot Image compiled successfully: "${fname}" (${formatBytes(outBootImg.length)}). Ready to boot!`, 'success');
       } catch (err) {
         addLog(`Mainline build failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -1212,6 +1248,42 @@ export default function App() {
               Repack for Samsung Odin (.tar.md5)
             </button>
           </div>
+
+          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <FileDown className="w-3.5 h-3.5 text-emerald-400" />
+                Rebuild Artifacts ({rebuiltArtifacts.length})
+              </h4>
+            </div>
+
+            {rebuiltArtifacts.length === 0 ? (
+              <p className="text-xs text-slate-500">Repacked boot images and ramdisks will appear here for re-download.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {rebuiltArtifacts.map(artifact => (
+                  <div key={artifact.id} className="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-mono text-slate-200 truncate">{artifact.name}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {artifact.kind.replace('_', ' ')} • {formatBytes(artifact.bytes.length)} • {format(artifact.createdAt, 'HH:mm:ss')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        downloadBlob(artifact.bytes, artifact.name, artifact.mime);
+                        addLog(`Downloaded artifact from rebuild list: "${artifact.name}"`, 'info');
+                      }}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold rounded-lg border border-slate-700 flex items-center gap-1.5 shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      Download
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1288,10 +1360,12 @@ export default function App() {
                 <button
                   onClick={() => {
                     if (file.content) {
-                      const blob = new Blob([file.content], { type: 'text/plain' });
                       downloadBlob(new Uint8Array(new TextEncoder().encode(file.content)), file.name, 'text/plain');
-                    } else {
+                    } else if (file.binaryData && file.binaryData.length > 0) {
+                      downloadBlob(file.binaryData, file.name, 'application/octet-stream');
                       addLog(`Exported binary artifact: ${file.name}`, 'info');
+                    } else {
+                      addLog(`No binary payload available for "${file.name}"`, 'error');
                     }
                   }}
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors border border-slate-700"
