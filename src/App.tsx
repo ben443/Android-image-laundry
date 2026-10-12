@@ -14,7 +14,6 @@ import {
   FileText, 
   Eye, 
   Trash2, 
-  Sparkles, 
   Check, 
   X, 
   FolderOpen, 
@@ -66,7 +65,6 @@ import {
 import { 
   decompileDtb, 
   compileDts, 
-  SAMPLE_DTS_PRESETS, 
   FdtParseResult 
 } from './utils/fdtConverter';
 import { 
@@ -79,32 +77,6 @@ import {
   parseFormattedSizeToBytes,
   ResizeValidationResult 
 } from './utils/partitionManager';
-
-const INITIAL_BOOT_PAYLOADS = generateRealisticPayloads(60 * 1024 * 1024, 2);
-
-const DEFAULT_SAMSUNG_BOOT_IMG: UploadedImage = {
-  name: 'boot_samsung_exynos990.img',
-  sizeBytes: 60 * 1024 * 1024,
-  sizeFormatted: '60.0 MB',
-  headerVersion: 2,
-  osVersion: '14.0.0',
-  osPatchLevel: '2024-05-05',
-  pageSize: 2048,
-  kernelSizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.kernelBytes.length),
-  ramdiskSizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.ramdiskBytes.length),
-  dtbSizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.dtbBytes.length),
-  cmdline: 'console=ttySAC2,115200n8 earlycon=exynos4210,0x10a20000 loop.max_part=7 androidboot.selinux=permissive androidboot.warranty_bit=0 sec_debug.enable=1',
-  isGki: false,
-  magicValid: true,
-  uploadedAt: new Date(),
-  hexPreview: '00000000  41 4e 44 52 4f 49 44 21 00 00 70 02 00 80 00 10  |ANDROID!..p.....|\n00000010  00 00 20 01 00 00 00 11 00 00 00 00 00 00 00 00  |.. .............|\n00000020  00 01 00 10 00 08 00 00 02 00 00 00 00 00 00 00  |................|',
-  isSamsung: true,
-  seAndroidFooter: 'SEANDROIDENFORCE',
-  kernelBytes: INITIAL_BOOT_PAYLOADS.kernelBytes,
-  ramdiskBytes: INITIAL_BOOT_PAYLOADS.ramdiskBytes,
-  dtbBytes: INITIAL_BOOT_PAYLOADS.dtbBytes,
-  targetRepackSizeBytes: 60 * 1024 * 1024
-};
 
 type RebuiltArtifact = {
   id: string;
@@ -142,8 +114,8 @@ export default function App() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // File Upload & Workspace State (preloaded with realistic 60MB Samsung Boot Image)
-  const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(DEFAULT_SAMSUNG_BOOT_IMG);
+  // File Upload & Workspace State
+  const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showHexInspector, setShowHexInspector] = useState(false);
   const [moduleFileName, setModuleFileName] = useState('');
@@ -154,115 +126,10 @@ export default function App() {
   const ramdiskUploadInputRef = useRef<HTMLInputElement>(null);
 
   // Unpacked Boot Image Files
-  const [imgFiles, setImgFiles] = useState<UnpackedFileItem[]>([
-    {
-      id: 'img_kernel',
-      name: 'kernel',
-      path: '/unpacked/img/kernel',
-      sizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.kernelBytes.length),
-      sizeBytes: INITIAL_BOOT_PAYLOADS.kernelBytes.length,
-      binaryData: INITIAL_BOOT_PAYLOADS.kernelBytes,
-      type: 'binary',
-      description: 'Linux kernel ARM64 zImage / Image.gz binary (~39 MB)'
-    },
-    {
-      id: 'img_ramdisk',
-      name: 'ramdisk.cpio',
-      path: '/unpacked/img/ramdisk.cpio',
-      sizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.ramdiskBytes.length),
-      sizeBytes: INITIAL_BOOT_PAYLOADS.ramdiskBytes.length,
-      binaryData: INITIAL_BOOT_PAYLOADS.ramdiskBytes,
-      type: 'binary',
-      description: 'Compressed CPIO ramdisk archive (~18 MB)'
-    },
-    {
-      id: 'img_dtb',
-      name: 'dtb.img',
-      path: '/unpacked/img/dtb.img',
-      sizeFormatted: formatBytes(INITIAL_BOOT_PAYLOADS.dtbBytes.length),
-      sizeBytes: INITIAL_BOOT_PAYLOADS.dtbBytes.length,
-      binaryData: INITIAL_BOOT_PAYLOADS.dtbBytes,
-      type: 'binary',
-      description: 'Device Tree Blob (DTB) hardware configuration table (~2.4 MB)'
-    },
-    {
-      id: 'img_cmdline',
-      name: 'cmdline.txt',
-      path: '/unpacked/img/cmdline.txt',
-      sizeFormatted: '168 Bytes',
-      type: 'text',
-      description: 'Kernel boot commandline parameters',
-      content: 'console=ttySAC2,115200n8 earlycon=exynos4210,0x10a20000 loop.max_part=7 androidboot.selinux=permissive androidboot.warranty_bit=0 sec_debug.enable=1'
-    },
-    {
-      id: 'img_header',
-      name: 'header_info.json',
-      path: '/unpacked/img/header_info.json',
-      sizeFormatted: '380 Bytes',
-      type: 'json',
-      description: 'Parsed Android boot header v2/v4 metadata structure',
-      content: JSON.stringify({
-        magic: "ANDROID!",
-        header_version: 2,
-        kernel_size: INITIAL_BOOT_PAYLOADS.kernelBytes.length,
-        ramdisk_size: INITIAL_BOOT_PAYLOADS.ramdiskBytes.length,
-        dtb_size: INITIAL_BOOT_PAYLOADS.dtbBytes.length,
-        page_size: 2048,
-        os_version: "14.0.0",
-        os_patch_level: "2024-05-05",
-        is_samsung: true,
-        seandroid_footer: "SEANDROIDENFORCE"
-      }, null, 2)
-    }
-  ]);
+  const [imgFiles, setImgFiles] = useState<UnpackedFileItem[]>([]);
 
   // Unpacked Ramdisk Files
-  const [ramdiskFiles, setRamdiskFiles] = useState<UnpackedFileItem[]>([
-    {
-      id: 'rd_init',
-      name: 'init',
-      path: '/unpacked/ramdisk/init',
-      sizeFormatted: '1.4 MB',
-      type: 'binary',
-      description: 'Primary Android first-stage init binary'
-    },
-    {
-      id: 'rd_init_rc',
-      name: 'init.rc',
-      path: '/unpacked/ramdisk/init.rc',
-      sizeFormatted: '920 Bytes',
-      type: 'text',
-      description: 'Main system initialization script and trigger rules',
-      content: `# Android Init Script (Unpacked Ramdisk)\non early-init\n    write /proc/sys/kernel/printk "6 6 1 7"\n    mkdir /dev/socket 0755 system system\n    start ueventd\n\non init\n    export PATH /product/bin:/apex/com.android.runtime/bin:/system/bin\n    export ANDROID_ROOT /system\n    export ANDROID_DATA /data\n    mount tmpfs tmpfs /mnt mode=0755,uid=0,gid=1000\n\non boot\n    # Module autoloading\n    exec_background /system/bin/modprobe -a -d /lib/modules custom_driver`
-    },
-    {
-      id: 'rd_fstab',
-      name: 'fstab.hardware',
-      path: '/unpacked/ramdisk/fstab.hardware',
-      sizeFormatted: '480 Bytes',
-      type: 'text',
-      description: 'Partition mount configuration table',
-      content: `# Android fstab file (Unpacked Ramdisk)\n# <src>                                 <mnt_point>  <type>  <mnt_flags and options>\n/dev/block/by-name/system               /system      ext4    ro,barrier=1\n/dev/block/by-name/vendor               /vendor      ext4    ro,barrier=1\n/dev/block/by-name/userdata             /data        f2fs    noatime,nosuid,nodev,discard\n/dev/block/by-name/boot                 /boot        raw     defaults`
-    },
-    {
-      id: 'rd_prop',
-      name: 'prop.default',
-      path: '/unpacked/ramdisk/prop.default',
-      sizeFormatted: '260 Bytes',
-      type: 'text',
-      description: 'Default build property flags and security rules',
-      content: `ro.secure=1\nro.adb.secure=1\nro.debuggable=0\nro.build.type=user\nro.build.tags=release-keys\nro.vndk.version=34`
-    },
-    {
-      id: 'rd_ueventd',
-      name: 'ueventd.rc',
-      path: '/unpacked/ramdisk/ueventd.rc',
-      sizeFormatted: '340 Bytes',
-      type: 'text',
-      description: 'Hardware device node permissions',
-      content: `/dev/null                 0666   root       root\n/dev/zero                 0666   root       root\n/dev/ptmx                 0666   root       root\n/dev/tty                  0666   root       root\n/dev/urandom              0666   root       root`
-    }
-  ]);
+  const [ramdiskFiles, setRamdiskFiles] = useState<UnpackedFileItem[]>([]);
 
   // Active View / Edit Modal File
   const [activeViewFile, setActiveViewFile] = useState<{
@@ -315,11 +182,10 @@ export default function App() {
   });
 
   // DTB / DTS Studio State
-  const [dtsContent, setDtsContent] = useState<string>(SAMPLE_DTS_PRESETS.samsung_exynos);
+  const [dtsContent, setDtsContent] = useState<string>('// Upload boot.img with an embedded DTB to populate DTS here.');
   const [dtsParseResult, setDtsParseResult] = useState<FdtParseResult | null>(null);
   const [dtsSearchQuery, setDtsSearchQuery] = useState<string>('');
   const [compiledDtbBytes, setCompiledDtbBytes] = useState<Uint8Array | null>(null);
-  const [selectedDtsPreset, setSelectedDtsPreset] = useState<'samsung_exynos' | 'qualcomm_mainline' | 'generic_arm64_virt'>('samsung_exynos');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({ '/': true, '/chosen': true, '/cpus': true, '/soc': true });
 
   // Flasher State
@@ -378,6 +244,8 @@ export default function App() {
 
       setUploadedImage(result.imageInfo);
       setImgFiles(result.extractedFiles);
+      syncRamdiskWorkspaceFromImage(result.imageInfo, result.extractedFiles);
+      syncDtbStudioFromImage(result.imageInfo, result.extractedFiles);
 
       if (result.imageInfo.isSamsung) {
         setSamsungConfig(prev => ({
@@ -395,6 +263,7 @@ export default function App() {
         if (decomp.success) {
           setDtsContent(decomp.dtsText);
           setDtsParseResult(decomp);
+          setCompiledDtbBytes(new Uint8Array(arrayBuffer));
           addLog(`Device Tree Blob automatically decompiled to DTS (${decomp.nodeCount} nodes, ${decomp.propCount} properties).`, 'success');
           setActiveTab('dtb');
         }
@@ -418,155 +287,66 @@ export default function App() {
     }
   };
 
-  // Preset Image Loader
-  const loadSamplePreset = (presetType: 'samsung_exynos' | 'samsung_snapdragon' | 'mainline_gki' | 'pixel_v4') => {
-    let presetName = 'boot.img';
-    let headerVer = 2;
-    let sizeMb = 60;
-    let isSamsung = false;
-    let footer: 'SEANDROIDENFORCE' | 'NO KNOX' | null = null;
-    let cmd = 'console=ttySAC2,115200n8 earlycon=exynos4210,0x10a20000 loop.max_part=7 androidboot.selinux=permissive';
+  const syncRamdiskWorkspaceFromImage = (imageInfo: UploadedImage, extractedFiles: UnpackedFileItem[]) => {
+    const ramdiskBytes =
+      extractedFiles.find(f => f.name === 'ramdisk.cpio')?.binaryData ||
+      imageInfo.ramdiskBytes;
 
-    if (presetType === 'samsung_exynos') {
-      presetName = 'boot_samsung_exynos990.img';
-      headerVer = 2;
-      sizeMb = 60;
-      isSamsung = true;
-      footer = 'SEANDROIDENFORCE';
-      cmd = 'console=ttySAC2,115200n8 earlycon=exynos4210,0x10a20000 loop.max_part=7 androidboot.selinux=permissive androidboot.warranty_bit=0 sec_debug.enable=1';
-    } else if (presetType === 'samsung_snapdragon') {
-      presetName = 'boot_samsung_sm8550_v4.img';
-      headerVer = 4;
-      sizeMb = 64;
-      isSamsung = true;
-      footer = 'SEANDROIDENFORCE';
-      cmd = 'console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 loop.max_part=7 androidboot.selinux=permissive androidboot.bootdevice=1d84000.ufshc';
-    } else if (presetType === 'mainline_gki') {
-      presetName = 'boot_mainline_arm64_v2.img';
-      headerVer = 2;
-      sizeMb = 60;
-      isSamsung = false;
-      cmd = 'console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 clk_ignore_unused pd_ignore_unused rootwait initcall_debug androidboot.hardware=qcom';
-    } else {
-      presetName = 'boot_pixel8_gki_v4.img';
-      headerVer = 4;
-      sizeMb = 64;
-      isSamsung = false;
-      cmd = 'console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 androidboot.hardware=husky androidboot.memcg=1';
+    if (ramdiskBytes && ramdiskBytes.length > 0) {
+      setRamdiskFiles([
+        {
+          id: 'rd_uploaded_ramdisk',
+          name: 'ramdisk.cpio',
+          path: '/unpacked/ramdisk/ramdisk.cpio',
+          sizeFormatted: formatBytes(ramdiskBytes.length),
+          sizeBytes: ramdiskBytes.length,
+          binaryData: ramdiskBytes,
+          type: 'binary',
+          description: `Ramdisk extracted from ${imageInfo.name}`,
+          updatedAt: new Date()
+        }
+      ]);
+      return;
     }
 
-    const payloads = generateRealisticPayloads(sizeMb * 1024 * 1024, headerVer);
+    setRamdiskFiles([]);
+  };
 
-    const dummyBytes = new Uint8Array(128);
-    const magic = [0x41, 0x4e, 0x44, 0x52, 0x4f, 0x49, 0x44, 0x21];
-    magic.forEach((b, idx) => { dummyBytes[idx] = b; });
-    dummyBytes[headerVer >= 3 ? 32 : 40] = headerVer;
+  const syncDtbStudioFromImage = (imageInfo: UploadedImage, extractedFiles: UnpackedFileItem[]) => {
+    const dtbBytes =
+      extractedFiles.find(f => f.name === 'dtb.img')?.binaryData ||
+      imageInfo.dtbBytes;
 
-    const lines: string[] = [];
-    for (let i = 0; i < 128; i += 16) {
-      const chunk = dummyBytes.slice(i, i + 16);
-      const hex = Array.from(chunk).map(b => b.toString(16).padStart(2, '0')).join(' ');
-      const ascii = Array.from(chunk).map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('');
-      lines.push(`${i.toString(16).padStart(8, '0')}  ${hex.padEnd(48, ' ')}  |${ascii}|`);
+    if (!dtbBytes || dtbBytes.length < 8) {
+      setCompiledDtbBytes(null);
+      setDtsParseResult(null);
+      setDtsContent('// Uploaded boot image does not include a valid DTB payload.');
+      return;
     }
 
-    const newImg: UploadedImage = {
-      name: presetName,
-      sizeBytes: sizeMb * 1024 * 1024,
-      sizeFormatted: `${sizeMb} MB`,
-      headerVersion: headerVer,
-      osVersion: '14.0.0',
-      osPatchLevel: '2024-05-05',
-      pageSize: headerVer === 2 ? 2048 : 4096,
-      kernelSizeFormatted: formatBytes(payloads.kernelBytes.length),
-      ramdiskSizeFormatted: formatBytes(payloads.ramdiskBytes.length),
-      dtbSizeFormatted: headerVer === 2 ? formatBytes(payloads.dtbBytes.length) : undefined,
-      cmdline: cmd,
-      isGki: headerVer >= 3,
-      magicValid: true,
-      uploadedAt: new Date(),
-      hexPreview: lines.join('\n'),
-      isSamsung,
-      seAndroidFooter: footer,
-      kernelBytes: payloads.kernelBytes,
-      ramdiskBytes: payloads.ramdiskBytes,
-      dtbBytes: payloads.dtbBytes,
-      targetRepackSizeBytes: sizeMb * 1024 * 1024
-    };
-
-    setUploadedImage(newImg);
-    setImgFiles([
-      {
-        id: 'img_kernel',
-        name: 'kernel',
-        path: '/unpacked/img/kernel',
-        sizeFormatted: formatBytes(payloads.kernelBytes.length),
-        sizeBytes: payloads.kernelBytes.length,
-        binaryData: payloads.kernelBytes,
-        type: 'binary',
-        description: 'ARM64 Linux kernel binary (Image / Image.gz)'
-      },
-      {
-        id: 'img_ramdisk',
-        name: 'ramdisk.cpio',
-        path: '/unpacked/img/ramdisk.cpio',
-        sizeFormatted: formatBytes(payloads.ramdiskBytes.length),
-        sizeBytes: payloads.ramdiskBytes.length,
-        binaryData: payloads.ramdiskBytes,
-        type: 'binary',
-        description: 'Compressed CPIO ramdisk archive'
-      },
-      {
-        id: 'img_dtb',
-        name: 'dtb.img',
-        path: '/unpacked/img/dtb.img',
-        sizeFormatted: formatBytes(payloads.dtbBytes.length),
-        sizeBytes: payloads.dtbBytes.length,
-        binaryData: payloads.dtbBytes,
-        type: 'binary',
-        description: 'Device Tree Blob (DTB) hardware configuration table'
-      },
-      {
-        id: 'img_cmdline',
-        name: 'cmdline.txt',
-        path: '/unpacked/img/cmdline.txt',
-        sizeFormatted: `${cmd.length} Bytes`,
-        type: 'text',
-        description: 'Kernel boot commandline parameters',
-        content: cmd
-      },
-      {
-        id: 'img_header',
-        name: 'header_info.json',
-        path: '/unpacked/img/header_info.json',
-        sizeFormatted: '380 Bytes',
-        type: 'json',
-        description: `Parsed Android boot header v${headerVer} metadata structure`,
-        content: JSON.stringify({
-          magic: "ANDROID!",
-          header_version: headerVer,
-          kernel_size: payloads.kernelBytes.length,
-          ramdisk_size: payloads.ramdiskBytes.length,
-          dtb_size: payloads.dtbBytes.length,
-          page_size: headerVer === 2 ? 2048 : 4096,
-          os_version: "14.0.0",
-          os_patch_level: "2024-05-05",
-          is_samsung: isSamsung,
-          seandroid_footer: footer
-        }, null, 2)
-      }
-    ]);
-
-    if (isSamsung) {
-      setSamsungConfig(prev => ({
-        ...prev,
-        appendSeAndroidFooter: true,
-        footerType: footer || 'SEANDROIDENFORCE',
-        selinuxPermissive: true
-      }));
+    const parse = decompileDtb(dtbBytes);
+    if (parse.success) {
+      setCompiledDtbBytes(dtbBytes);
+      setDtsContent(parse.dtsText);
+      setDtsParseResult(parse);
+      addLog(`Loaded DTS from uploaded image DTB (${parse.nodeCount} nodes, ${parse.propCount} properties).`, 'success');
+      return;
     }
 
-    addLog(`Loaded preset image: ${presetName} (Header v${headerVer}, ~${sizeMb} MB, ${isSamsung ? 'Samsung SEAndroid Profile' : 'Standard Android'})`, 'success');
+    setCompiledDtbBytes(dtbBytes);
+    setDtsParseResult(null);
+    setDtsContent('// Uploaded DTB could not be decompiled. You can edit this source manually and compile.');
+    addLog(`Uploaded DTB could not be auto-decompiled: ${parse.error || 'unknown parser error'}`, 'warn');
+  };
+
+  const handleDownloadLatestArtifact = (kind: 'boot_img' | 'ramdisk_cpio') => {
+    const latest = rebuiltArtifacts.find(a => a.kind === kind);
+    if (!latest) {
+      addLog(kind === 'boot_img' ? 'No repacked boot.img artifact available yet.' : 'No repacked ramdisk artifact available yet.', 'warn');
+      return;
+    }
+    downloadBlob(latest.bytes, latest.name, latest.mime);
+    addLog(`Downloaded latest artifact: "${latest.name}"`, 'success');
   };
 
   // --- REPACK & DOWNLOAD ---
@@ -720,7 +500,10 @@ export default function App() {
 
     setTimeout(() => {
       try {
-        const cpioBytes = createCpioArchive(ramdiskFiles, 18 * 1024 * 1024);
+        const directRamdisk = ramdiskFiles.length === 1
+          ? ramdiskFiles.find(f => f.name === 'ramdisk.cpio' && f.binaryData && f.binaryData.length > 0)?.binaryData
+          : undefined;
+        const cpioBytes = directRamdisk || createCpioArchive(ramdiskFiles, 18 * 1024 * 1024);
         setImgFiles(prev => prev.map(f => {
           if (f.name === 'ramdisk.cpio') {
             return {
@@ -759,7 +542,10 @@ export default function App() {
   };
 
   const handleDownloadRamdiskCpio = () => {
-    const cpioBytes = createCpioArchive(ramdiskFiles, 18 * 1024 * 1024);
+    const directRamdisk = ramdiskFiles.length === 1
+      ? ramdiskFiles.find(f => f.name === 'ramdisk.cpio' && f.binaryData && f.binaryData.length > 0)?.binaryData
+      : undefined;
+    const cpioBytes = directRamdisk || createCpioArchive(ramdiskFiles, 18 * 1024 * 1024);
     const filename = `ramdisk_repacked_${Date.now()}.cpio`;
     downloadBlob(cpioBytes, filename, 'application/octet-stream');
     addRebuiltArtifact({
@@ -900,6 +686,7 @@ export default function App() {
         path: '/unpacked/img/dtb.img',
         sizeFormatted: formatBytes(dtb!.length),
         sizeBytes: dtb!.length,
+        binaryData: dtb!,
         type: 'binary',
         description: 'Device Tree Blob compiled from DTB/DTS Studio',
         updatedAt: new Date()
@@ -909,6 +696,12 @@ export default function App() {
       }
       return [...prev, item];
     });
+
+    setUploadedImage(prev => prev ? {
+      ...prev,
+      dtbBytes: dtb,
+      dtbSizeFormatted: formatBytes(dtb.length)
+    } : prev);
 
     addLog(`Injected compiled DTB (${formatBytes(dtb.length)}) into Boot Image workspace as /unpacked/img/dtb.img`, 'success');
   };
@@ -923,16 +716,6 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
-
-  // Helper to load sample DTS preset
-  const handleSelectDtsPreset = (presetKey: 'samsung_exynos' | 'qualcomm_mainline' | 'generic_arm64_virt') => {
-    setSelectedDtsPreset(presetKey);
-    const text = SAMPLE_DTS_PRESETS[presetKey];
-    setDtsContent(text);
-    const parse = decompileDtb(new Uint8Array(compileDts(text).dtb || []));
-    setDtsParseResult(parse.success ? parse : null);
-    addLog(`Loaded Device Tree preset: ${presetKey.replace('_', ' ').toUpperCase()}`, 'info');
   };
 
   // --- MAINLINE KERNEL BUILDER ---
@@ -1039,57 +822,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Quick Sample Presets */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Or load a ready test preset:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <button 
-              onClick={() => loadSamplePreset('samsung_exynos')}
-              className="p-3 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/50 rounded-lg text-left transition-all group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-cyan-400 font-mono group-hover:text-cyan-300">Samsung Exynos</span>
-                <span className="text-[9px] bg-blue-950 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded">SEAndroid</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Header v2 • Exynos 990 • 48 MB</p>
-            </button>
-
-            <button 
-              onClick={() => loadSamplePreset('samsung_snapdragon')}
-              className="p-3 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-purple-500/50 rounded-lg text-left transition-all group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-400 font-mono group-hover:text-purple-300">Samsung S23/S24</span>
-                <span className="text-[9px] bg-purple-950 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded">SM8550</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Header v4 • GKI + Odin • 64 MB</p>
-            </button>
-
-            <button 
-              onClick={() => loadSamplePreset('mainline_gki')}
-              className="p-3 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg text-left transition-all group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-400 font-mono group-hover:text-emerald-300">Mainline Linux</span>
-                <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded">DTB Inc.</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Header v2 • ARM64 Mainline • 36 MB</p>
-            </button>
-
-            <button 
-              onClick={() => loadSamplePreset('pixel_v4')}
-              className="p-3 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-amber-500/50 rounded-lg text-left transition-all group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-400 font-mono group-hover:text-amber-300">Pixel Generic GKI</span>
-                <span className="text-[9px] bg-amber-950 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded">GKI v4</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Header v4 • Android 14 • 64 MB</p>
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Active File Inspector Card */}
@@ -1129,7 +861,15 @@ export default function App() {
                 <Eye className="w-3.5 h-3.5 text-cyan-400" /> Hex Inspector
               </button>
               <button 
-                onClick={() => { setUploadedImage(null); addLog('Cleared image from workspace.', 'info'); }}
+                onClick={() => {
+                  setUploadedImage(null);
+                  setImgFiles([]);
+                  setRamdiskFiles([]);
+                  setCompiledDtbBytes(null);
+                  setDtsParseResult(null);
+                  setDtsContent('// Upload boot.img with an embedded DTB to populate DTS here.');
+                  addLog('Cleared image from workspace.', 'info');
+                }}
                 className="px-3 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Clear
@@ -1255,6 +995,22 @@ export default function App() {
                 <FileDown className="w-3.5 h-3.5 text-emerald-400" />
                 Rebuild Artifacts ({rebuiltArtifacts.length})
               </h4>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadLatestArtifact('boot_img')}
+                  className="px-2.5 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/30 text-cyan-300 text-[11px] font-semibold rounded-lg flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download Repacked IMG
+                </button>
+                <button
+                  onClick={() => handleDownloadLatestArtifact('ramdisk_cpio')}
+                  className="px-2.5 py-1.5 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/30 text-amber-300 text-[11px] font-semibold rounded-lg flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download Repacked Ramdisk
+                </button>
+              </div>
             </div>
 
             {rebuiltArtifacts.length === 0 ? (
@@ -1311,6 +1067,18 @@ export default function App() {
                   const dtbFile = imgFiles.find(f => f.name === 'dtb.img');
                   if (dtbFile) {
                     addLog('Sending dtb.img to Device Tree Studio...', 'info');
+                    if (dtbFile.binaryData) {
+                      const parse = decompileDtb(dtbFile.binaryData);
+                      if (parse.success) {
+                        setDtsContent(parse.dtsText);
+                        setDtsParseResult(parse);
+                        setCompiledDtbBytes(dtbFile.binaryData);
+                      } else {
+                        setDtsParseResult(null);
+                        setCompiledDtbBytes(dtbFile.binaryData);
+                        setDtsContent('// dtb.img is present but could not be decompiled. Edit manually and compile.');
+                      }
+                    }
                     setActiveTab('dtb');
                   }
                 }}
@@ -1621,40 +1389,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Presets & Actions Toolbar */}
+        {/* Upload-Based Actions Toolbar */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Device Presets:</span>
-            <button
-              onClick={() => handleSelectDtsPreset('samsung_exynos')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                selectedDtsPreset === 'samsung_exynos' 
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40' 
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Samsung Exynos 990 / 2200
-            </button>
-            <button
-              onClick={() => handleSelectDtsPreset('qualcomm_mainline')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                selectedDtsPreset === 'qualcomm_mainline' 
-                  ? 'bg-purple-600/20 text-purple-400 border border-purple-500/40' 
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Qualcomm SM8550 Mainline
-            </button>
-            <button
-              onClick={() => handleSelectDtsPreset('generic_arm64_virt')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                selectedDtsPreset === 'generic_arm64_virt' 
-                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40' 
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Generic ARM64 Virt
-            </button>
+          <div className="text-xs text-slate-400 font-semibold">
+            {uploadedImage
+              ? `DTS source loaded from: ${uploadedImage.name}`
+              : 'Upload boot.img to load DTB/DTS data.'}
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
